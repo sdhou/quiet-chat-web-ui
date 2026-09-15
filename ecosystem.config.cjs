@@ -1,0 +1,32 @@
+module.exports = {
+  apps: [
+    {
+      name: "mlx-vlm-qwen3.8-27b",
+      cwd: "/opt/code/model/web",
+      script: "/Users/sdhou/miniconda3/envs/model/bin/python",
+      args: [
+        "-m",
+        "mlx_vlm",
+        "server",
+        "--model",
+        "/opt/code/model/Qwen3.8-27B-Uncensored-MLX/8-bit",
+        "--draft-model",
+        "/opt/code/model/Qwen3.8-27B-Uncensored-MLX/mtp",
+        "--draft-kind",
+        "mtp",
+        "--draft-block-size",
+        "4",
+        "--port",
+        "9100",
+      ],
+      interpreter: "none",
+      autorestart: true,
+      restart_delay: 3000,
+      max_restarts: 10,
+      kill_timeout: 10000,
+      env: {
+        PYTHONUNBUFFERED: "1",
+      },
+    },
+  ],
+};
