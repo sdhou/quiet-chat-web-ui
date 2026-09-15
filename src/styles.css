@@ -80,7 +80,11 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,summary:focus-vi
 .number-field { grid-template-columns:minmax(0,1fr) 116px; align-items:center; } .number-field input { padding:9px 10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; }
 .number-field.disabled { opacity:.45; } .number-field input:disabled { cursor:not-allowed; }
 .panel-footer { gap:10px; border-top:1px solid var(--line); border-bottom:0; } .panel-footer button { height:42px; border-radius:12px; font-size:12px; cursor:pointer; }
-.reset-button { padding:0 15px; border:1px solid var(--line); background:transparent; color:var(--muted); } .done-button { min-width:104px; border:0; background:var(--accent); color:#17200e; font-weight:650; }
+.reset-button { padding:0 15px; border:1px solid var(--line); background:transparent; color:var(--muted); transition:160ms ease; } .reset-button:hover { border-color:var(--line); color:var(--ink); }
+.reset-button.confirming { border-color:rgba(255,124,114,.42); background:rgba(255,124,114,.1); color:var(--danger); }
+.save-state { display:flex; align-items:center; gap:6px; color:var(--dim); font-size:11px; }
+.save-state::before { content:""; width:5px; height:5px; border-radius:50%; background:#3d423c; transition:170ms ease; }
+.save-state.saved::before { background:var(--accent); box-shadow:0 0 8px rgba(201,255,99,.55); }
 @keyframes reveal { from { opacity:0; transform:translateY(12px); } } @keyframes message-in { from { opacity:0; transform:translateY(6px); } } @keyframes fade-in { from { opacity:0; } } @keyframes panel-in { from { opacity:0; transform:translateX(24px); } } @keyframes orbit { to { transform:rotate(360deg); } }
 @keyframes blink { 0%,70%,100% { opacity:.2; transform:translateY(0); } 35% { opacity:1; transform:translateY(-3px); } }
 

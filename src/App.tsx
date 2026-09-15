@@ -47,6 +47,8 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [settings, setSettings] = useState(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [saved, setSaved] = useState(true);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [model, setModel] = useState("");
   const [online, setOnline] = useState<boolean | null>(null);
@@ -57,8 +59,26 @@ export default function Home() {
   const closeSettingsRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    try { localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings)); }
-    catch { /* Keep settings usable when browser storage is unavailable. */ }
+    setSaved(false);
+    const timer = window.setTimeout(() => {
+      try { localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings)); }
+      catch { /* Keep settings usable when browser storage is unavailable. */ }
+      setSaved(true);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [settings]);
+  useEffect(() => {
+    function flush() {
+      try { localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings)); }
+      catch { /* Keep settings usable when browser storage is unavailable. */ }
+    }
+    function onVisibility() { if (document.visibilityState === "hidden") flush(); }
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [settings]);
   useEffect(() => {
     let active = true; let timer = 0;
@@ -91,8 +111,14 @@ export default function Home() {
   useEffect(() => {
     document.body.style.overflow = settingsOpen ? "hidden" : "";
     if (settingsOpen) closeSettingsRef.current?.focus(); else textareaRef.current?.focus();
+    if (!settingsOpen) setConfirmReset(false);
     return () => { document.body.style.overflow = ""; };
   }, [settingsOpen]);
+  useEffect(() => {
+    if (!confirmReset) return;
+    const timer = window.setTimeout(() => setConfirmReset(false), 3500);
+    return () => window.clearTimeout(timer);
+  }, [confirmReset]);
   useEffect(() => {
     if (!settingsOpen) return;
     function closeOnEscape(event: globalThis.KeyboardEvent) {
@@ -260,7 +286,10 @@ export default function Home() {
             <NumberInput label="Frequency Penalty" value={settings.frequencyPenalty} min={-2} max={2} step={0.05} change={(frequencyPenalty) => update("frequencyPenalty", frequencyPenalty)} />
             <NumberInput label="Seed" value={settings.seed} min={0} max={2147483647} change={(seed) => update("seed", seed)} />
           </div>
-          <div className="panel-footer"><button className="reset-button" type="button" onClick={() => setSettings(DEFAULTS)}>恢复默认</button><button className="done-button" type="button" onClick={() => setSettingsOpen(false)}>完成</button></div>
+          <div className="panel-footer">
+            <button className={`reset-button ${confirmReset ? "confirming" : ""}`} type="button" onClick={() => { if (confirmReset) { setSettings(DEFAULTS); setConfirmReset(false); } else setConfirmReset(true); }}>{confirmReset ? "确认恢复？" : "恢复默认"}</button>
+            <span className={`save-state ${saved ? "saved" : ""}`} aria-live="polite">{saved ? "已保存" : "保存中…"}</span>
+          </div>
         </aside>
       </div>}
     </main>
