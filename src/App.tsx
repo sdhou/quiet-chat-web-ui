@@ -265,7 +265,12 @@ export default function Home() {
       <div className="composer-wrap"><form className="composer" onSubmit={submit}>
         <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keydown} placeholder={online === false ? "模型服务未连接" : "输入消息…"} rows={1} disabled={online === false} aria-label="聊天消息" />
         {generating ? <button className="send-button stop" type="button" onClick={() => abortRef.current?.abort()} aria-label="停止生成" title="停止生成（Esc）"><span /></button> : <button className="send-button" type="submit" disabled={!input.trim() || !model} aria-label="发送消息" title="发送消息（⌘/Ctrl + Enter）">↑</button>}
-      </form><p className="composer-note">{generating ? "Esc 停止生成" : "⌘/Ctrl + Enter 发送 · Enter 换行"}</p></div>
+      </form><p className="composer-note">
+        <span><kbd>⌘/Ctrl</kbd><kbd>Enter</kbd>发送</span>
+        <span><kbd>⌘/Ctrl</kbd><kbd>,</kbd>参数</span>
+        <span><kbd>⌘/Ctrl</kbd><kbd>K</kbd>清空</span>
+        <span><kbd>Esc</kbd>{generating ? "停止生成" : "关闭面板"}</span>
+      </p></div>
 
       {settingsOpen && <div className="settings-layer" role="presentation">
         <button className="settings-backdrop" type="button" aria-label="关闭模型参数" onClick={() => setSettingsOpen(false)} />
