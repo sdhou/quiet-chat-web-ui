@@ -222,7 +222,18 @@ export default function Home() {
   function submit(event: FormEvent) { event.preventDefault(); send(); }
   function keydown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Escape" && generating) { event.preventDefault(); abortRef.current?.abort(); }
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); send(); }
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    if (event.metaKey || event.ctrlKey) {
+      event.preventDefault();
+      const target = event.currentTarget;
+      const { selectionStart, selectionEnd, value } = target;
+      target.value = `${value.slice(0, selectionStart)}\n${value.slice(selectionEnd)}`;
+      target.selectionStart = target.selectionEnd = selectionStart + 1;
+      setInput(target.value);
+    } else {
+      event.preventDefault();
+      send();
+    }
   }
   function clear() { abortRef.current?.abort(); setMessages([]); setInput(""); textareaRef.current?.focus(); }
   function regenerate() {
@@ -264,9 +275,9 @@ export default function Home() {
 
       <div className="composer-wrap"><form className="composer" onSubmit={submit}>
         <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keydown} placeholder={online === false ? "模型服务未连接" : "输入消息…"} rows={1} disabled={online === false} aria-label="聊天消息" />
-        {generating ? <button className="send-button stop" type="button" onClick={() => abortRef.current?.abort()} aria-label="停止生成" title="停止生成（Esc）"><span /></button> : <button className="send-button" type="submit" disabled={!input.trim() || !model} aria-label="发送消息" title="发送消息（⌘/Ctrl + Enter）">↑</button>}
+        {generating ? <button className="send-button stop" type="button" onClick={() => abortRef.current?.abort()} aria-label="停止生成" title="停止生成（Esc）"><span /></button> : <button className="send-button" type="submit" disabled={!input.trim() || !model} aria-label="发送消息" title="发送消息（Enter）">↑</button>}
       </form><p className="composer-note">
-        <span><kbd>⌘/Ctrl</kbd><kbd>Enter</kbd>发送</span>
+        <span><kbd>Enter</kbd>发送 · <kbd>⌘/Ctrl</kbd><kbd>Enter</kbd>换行</span>
         <span><kbd>⌘/Ctrl</kbd><kbd>,</kbd>参数</span>
         <span><kbd>⌘/Ctrl</kbd><kbd>K</kbd>清空</span>
         <span><kbd>Esc</kbd>{generating ? "停止生成" : "关闭面板"}</span>
