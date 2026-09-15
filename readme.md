@@ -1,5 +1,5 @@
 # chat web ui
 
-这是一个纯前端极简风格项目
+chat web ui 它 安静 易用 极简 平庸 就像我一样
 
 - vite react typescript

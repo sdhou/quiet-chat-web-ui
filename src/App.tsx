@@ -18,7 +18,21 @@ const DEFAULTS: Settings = {
   repetitionPenalty: 1, presencePenalty: 0, frequencyPenalty: 0,
   seed: 0, stream: true,
 };
-const SUGGESTIONS = ["用三个要点解释量子计算", "写一个简洁的产品发布文案", "帮我设计一周学习计划"];
+const SETTINGS_STORAGE_KEY = "model-settings";
+
+function loadSettings(): Settings {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "null");
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) return DEFAULTS;
+
+    return Object.fromEntries(Object.entries(DEFAULTS).map(([key, fallback]) => {
+      const value = (stored as Record<string, unknown>)[key];
+      return [key, typeof value === typeof fallback ? value : fallback];
+    })) as Settings;
+  } catch {
+    return DEFAULTS;
+  }
+}
 const id = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 function textOf(value: unknown): string {
@@ -31,7 +45,7 @@ function textOf(value: unknown): string {
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [settings, setSettings] = useState(DEFAULTS);
+  const [settings, setSettings] = useState(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [model, setModel] = useState("");
@@ -41,6 +55,11 @@ export default function Home() {
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  useEffect(() => { textareaRef.current?.focus(); }, []);
+  useEffect(() => {
+    try { localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings)); }
+    catch { /* Keep settings usable when browser storage is unavailable. */ }
+  }, [settings]);
   useEffect(() => {
     let active = true;
     fetch("/api/models", { cache: "no-store" }).then(async (response) => {
@@ -62,6 +81,35 @@ export default function Home() {
     document.body.style.overflow = settingsOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [settingsOpen]);
+  useEffect(() => {
+    if (!settingsOpen) return;
+    function closeOnEscape(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape" && event.key !== "Esc" && event.code !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setSettingsOpen(false);
+    }
+    document.addEventListener("keydown", closeOnEscape, true);
+    return () => document.removeEventListener("keydown", closeOnEscape, true);
+  }, [settingsOpen]);
+  useEffect(() => {
+    function handleShortcut(event: globalThis.KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key === ",") {
+        event.preventDefault();
+        setSettingsOpen((open) => !open);
+      } else if (key === "k") {
+        event.preventDefault();
+        abortRef.current?.abort();
+        setMessages([]);
+        setInput("");
+        textareaRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   const updateAssistant = (messageId: string, patch: Partial<Message>) =>
     setMessages((current) => current.map((message) => message.id === messageId ? { ...message, ...patch } : message));
@@ -151,16 +199,14 @@ export default function Home() {
       <header className="topbar">
         <div className="brand"><span className="brand-mark">Q</span><div><strong>Quiet</strong><span className="model-line"><i className={`status-dot ${online === false ? "offline" : ""}`} />{online === false ? "模型离线" : modelLabel}</span></div></div>
         <div className="top-actions">
-          {messages.length > 0 && <button className="text-button" type="button" onClick={clear}>清空</button>}
-          <button className="settings-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="打开模型参数"><span className="tune-icon" aria-hidden="true"><i /><i /><i /></span>参数</button>
+          {messages.length > 0 && <button className="text-button" type="button" onClick={clear} aria-keyshortcuts="Control+K Meta+K" title="清空对话（⌘/Ctrl K）">清空<kbd>⌘/Ctrl K</kbd></button>}
+          <button className="settings-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="打开模型参数" aria-keyshortcuts="Control+, Meta+," title="打开模型参数（⌘/Ctrl ,）"><span className="tune-icon" aria-hidden="true"><i /><i /><i /></span>参数<kbd>⌘/Ctrl ,</kbd></button>
         </div>
       </header>
 
       <section className={`conversation ${messages.length ? "active" : ""}`}>
         {messages.length === 0 ? <div className="empty-state">
-          <div className="orb"><span /></div><p className="eyebrow">LOCAL INTELLIGENCE</p>
-          <h1>有什么想法？</h1><p className="empty-copy">和本地模型直接对话。安静、快速，不留下历史记录。</p>
-          <div className="suggestions">{SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" onClick={() => send(suggestion)} disabled={!model}>{suggestion}<span>↗</span></button>)}</div>
+          <div className="orb"><span /></div>
         </div> : <div className="message-list" aria-live="polite">
           {messages.map((message, index) => <article className={`message ${message.role} ${message.error ? "error" : ""}`} key={message.id}>
             <div className="message-role">{message.role === "user" ? "你" : "Q"}</div>
@@ -181,7 +227,7 @@ export default function Home() {
       {settingsOpen && <div className="settings-layer" role="presentation">
         <button className="settings-backdrop" type="button" aria-label="关闭模型参数" onClick={() => setSettingsOpen(false)} />
         <aside className="settings-panel" aria-label="模型参数">
-          <div className="panel-header"><div><p className="eyebrow">MODEL CONTROL</p><h2>模型参数</h2></div><button className="close-button" type="button" onClick={() => setSettingsOpen(false)} aria-label="关闭">×</button></div>
+          <div className="panel-header"><div><p className="eyebrow">MODEL CONTROL</p><h2>模型参数</h2></div><button className="close-button" type="button" onClick={() => setSettingsOpen(false)} aria-label="关闭" aria-keyshortcuts="Escape" title="关闭（Esc）">×</button></div>
           <div className="panel-scroll">
             <label className="field"><span>System Prompt</span><textarea value={settings.systemPrompt} onChange={(e) => setSettings({ ...settings, systemPrompt: e.target.value })} placeholder="例如：回答保持准确、简洁。" rows={4} /></label>
             <Toggle label="流式输出" hint="实时显示模型生成内容" checked={settings.stream} change={(stream) => setSettings({ ...settings, stream })} />
@@ -189,15 +235,13 @@ export default function Home() {
             <Range label="Top P" value={settings.topP} min={0} max={1} step={0.05} change={(topP) => setSettings({ ...settings, topP })} />
             <NumberInput label="Max Tokens" value={settings.maxTokens} min={1} max={32768} change={(maxTokens) => setSettings({ ...settings, maxTokens })} />
             <Toggle label="Thinking" hint="显示可折叠的思考内容" checked={settings.enableThinking} change={(enableThinking) => setSettings({ ...settings, enableThinking })} />
-            {settings.enableThinking && <NumberInput label="Thinking Budget" value={settings.thinkingBudget} min={1} max={32768} change={(thinkingBudget) => setSettings({ ...settings, thinkingBudget })} />}
-            <details className="advanced-settings"><summary>高级参数</summary><div className="advanced-fields">
-              <NumberInput label="Top K" value={settings.topK} min={0} max={1000} change={(topK) => setSettings({ ...settings, topK })} />
-              <Range label="Min P" value={settings.minP} min={0} max={1} step={0.01} change={(minP) => setSettings({ ...settings, minP })} />
-              <NumberInput label="Repetition Penalty" value={settings.repetitionPenalty} min={0} max={2} step={0.05} change={(repetitionPenalty) => setSettings({ ...settings, repetitionPenalty })} />
-              <NumberInput label="Presence Penalty" value={settings.presencePenalty} min={-2} max={2} step={0.05} change={(presencePenalty) => setSettings({ ...settings, presencePenalty })} />
-              <NumberInput label="Frequency Penalty" value={settings.frequencyPenalty} min={-2} max={2} step={0.05} change={(frequencyPenalty) => setSettings({ ...settings, frequencyPenalty })} />
-              <NumberInput label="Seed" value={settings.seed} min={0} max={2147483647} change={(seed) => setSettings({ ...settings, seed })} />
-            </div></details>
+            <NumberInput label="Thinking Budget" value={settings.thinkingBudget} min={1} max={32768} disabled={!settings.enableThinking} change={(thinkingBudget) => setSettings({ ...settings, thinkingBudget })} />
+            <NumberInput label="Top K" value={settings.topK} min={0} max={1000} change={(topK) => setSettings({ ...settings, topK })} />
+            <Range label="Min P" value={settings.minP} min={0} max={1} step={0.01} change={(minP) => setSettings({ ...settings, minP })} />
+            <NumberInput label="Repetition Penalty" value={settings.repetitionPenalty} min={0} max={2} step={0.05} change={(repetitionPenalty) => setSettings({ ...settings, repetitionPenalty })} />
+            <NumberInput label="Presence Penalty" value={settings.presencePenalty} min={-2} max={2} step={0.05} change={(presencePenalty) => setSettings({ ...settings, presencePenalty })} />
+            <NumberInput label="Frequency Penalty" value={settings.frequencyPenalty} min={-2} max={2} step={0.05} change={(frequencyPenalty) => setSettings({ ...settings, frequencyPenalty })} />
+            <NumberInput label="Seed" value={settings.seed} min={0} max={2147483647} change={(seed) => setSettings({ ...settings, seed })} />
           </div>
           <div className="panel-footer"><button className="reset-button" type="button" onClick={() => setSettings(DEFAULTS)}>恢复默认</button><button className="done-button" type="button" onClick={() => setSettingsOpen(false)}>完成</button></div>
         </aside>
@@ -212,6 +256,6 @@ function Toggle({ label, hint, checked, change }: { label: string; hint: string;
 function Range({ label, value, min, max, step, change }: { label: string; value: number; min: number; max: number; step: number; change: (value: number) => void }) {
   return <label className="range-field"><span><strong>{label}</strong><output>{value}</output></span><input type="range" value={value} min={min} max={max} step={step} onChange={(e) => change(Number(e.target.value))} /></label>;
 }
-function NumberInput({ label, value, min, max, step = 1, change }: { label: string; value: number; min: number; max: number; step?: number; change: (value: number) => void }) {
-  return <label className="number-field"><strong>{label}</strong><input type="number" value={value} min={min} max={max} step={step} onChange={(e) => { const next = Number(e.target.value); if (Number.isFinite(next)) change(next); }} /></label>;
+function NumberInput({ label, value, min, max, step = 1, disabled = false, change }: { label: string; value: number; min: number; max: number; step?: number; disabled?: boolean; change: (value: number) => void }) {
+  return <label className={`number-field ${disabled ? "disabled" : ""}`}><strong>{label}</strong><input type="number" value={value} min={min} max={max} step={step} disabled={disabled} onChange={(e) => { const next = Number(e.target.value); if (Number.isFinite(next)) change(next); }} /></label>;
 }

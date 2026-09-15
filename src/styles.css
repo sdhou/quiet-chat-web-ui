@@ -19,9 +19,10 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,summary:focus-vi
 .status-dot { width:6px; height:6px; flex:0 0 auto; border-radius:50%; background:var(--accent); box-shadow:0 0 10px rgba(201,255,99,.7); }
 .status-dot.offline { background:var(--danger); box-shadow:none; }
 .top-actions { display:flex; align-items:center; gap:8px; }
-.text-button,.settings-button { height:38px; padding:0 13px; border:1px solid transparent; border-radius:11px; background:transparent; color:var(--muted); font-size:13px; cursor:pointer; transition:160ms ease; }
+.text-button,.settings-button { display:flex; align-items:center; gap:8px; height:38px; padding:0 13px; border:1px solid transparent; border-radius:11px; background:transparent; color:var(--muted); font-size:13px; cursor:pointer; transition:160ms ease; }
 .text-button:hover,.settings-button:hover { border-color:var(--line); background:rgba(255,255,255,.045); color:var(--ink); }
-.settings-button { display:flex; align-items:center; gap:8px; border-color:var(--line); background:rgba(255,255,255,.035); }
+.settings-button { border-color:var(--line); background:rgba(255,255,255,.035); }
+.top-actions kbd { padding:2px 5px; border:1px solid var(--line); border-radius:5px; color:var(--muted); background:rgba(255,255,255,.04); font:10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
 .tune-icon { display:grid; gap:3px; width:14px; }
 .tune-icon i { display:block; height:1px; background:currentColor; }
 .tune-icon i:nth-child(1) { width:10px; margin-left:4px; } .tune-icon i:nth-child(2) { width:14px; } .tune-icon i:nth-child(3) { width:9px; margin-left:2px; }
@@ -86,14 +87,14 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,summary:focus-vi
 .range-field output { min-width:42px; padding:3px 7px; border-radius:7px; background:rgba(255,255,255,.05); color:var(--accent); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; text-align:center; }
 .range-field input { width:100%; height:3px; accent-color:var(--accent); cursor:pointer; }
 .number-field { grid-template-columns:minmax(0,1fr) 116px; align-items:center; } .number-field input { padding:9px 10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; }
-.advanced-settings { margin-top:8px; padding-top:20px; border-top:1px solid var(--line); } .advanced-settings>summary { color:var(--muted); font-size:12px; } .advanced-fields { padding-top:24px; }
+.number-field.disabled { opacity:.45; } .number-field input:disabled { cursor:not-allowed; }
 .panel-footer { gap:10px; border-top:1px solid var(--line); border-bottom:0; } .panel-footer button { height:42px; border-radius:12px; font-size:12px; cursor:pointer; }
 .reset-button { padding:0 15px; border:1px solid var(--line); background:transparent; color:var(--muted); } .done-button { min-width:104px; border:0; background:var(--accent); color:#17200e; font-weight:650; }
 @keyframes reveal { from { opacity:0; transform:translateY(12px); } } @keyframes message-in { from { opacity:0; transform:translateY(6px); } } @keyframes fade-in { from { opacity:0; } } @keyframes panel-in { from { opacity:0; transform:translateX(24px); } } @keyframes orbit { to { transform:rotate(360deg); } }
 @keyframes blink { 0%,70%,100% { opacity:.2; transform:translateY(0); } 35% { opacity:1; transform:translateY(-3px); } }
 
 @media (max-width:640px) {
-  .topbar { height:68px; padding:0 15px; } .brand-mark { width:34px; height:34px; } .model-line { max-width:145px; } .text-button,.settings-button { padding:0 10px; }
+  .topbar { height:68px; padding:0 15px; } .brand-mark { width:34px; height:34px; } .model-line { max-width:145px; } .text-button,.settings-button { padding:0 10px; } .top-actions kbd { display:none; }
   .conversation { padding:90px 15px 148px; } .empty-state { min-height:calc(100dvh - 245px); } .empty-copy { margin-bottom:26px; }
   .suggestions { grid-template-columns:1fr; } .suggestions button { min-height:52px; }
   .message { grid-template-columns:30px minmax(0,1fr); gap:11px; margin-bottom:28px; } .message.user { grid-template-columns:minmax(0,1fr) 30px; padding-left:18px; }

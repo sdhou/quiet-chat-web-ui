@@ -28,5 +28,19 @@ module.exports = {
         PYTHONUNBUFFERED: "1",
       },
     },
+    {
+      name: "quiet-local-chat",
+      cwd: "/opt/code/model/web",
+      script: "/opt/homebrew/bin/bun",
+      args: ["run", "dev"],
+      interpreter: "none",
+      autorestart: true,
+      restart_delay: 3000,
+      max_restarts: 10,
+      kill_timeout: 10000,
+      env: {
+        NODE_ENV: "development",
+      },
+    },
   ],
 };
