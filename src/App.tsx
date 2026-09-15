@@ -179,7 +179,7 @@ export default function Home() {
   }
   function submit(event: FormEvent) { event.preventDefault(); send(); }
   function keydown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); }
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); send(); }
   }
   function clear() { abortRef.current?.abort(); setMessages([]); setInput(""); textareaRef.current?.focus(); }
   function regenerate() {
@@ -222,7 +222,7 @@ export default function Home() {
       <div className="composer-wrap"><form className="composer" onSubmit={submit}>
         <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keydown} placeholder={online === false ? "模型服务未连接" : "输入消息…"} rows={1} disabled={online === false} aria-label="聊天消息" />
         {generating ? <button className="send-button stop" type="button" onClick={() => abortRef.current?.abort()} aria-label="停止生成"><span /></button> : <button className="send-button" type="submit" disabled={!input.trim() || !model} aria-label="发送消息">↑</button>}
-      </form><p className="composer-note">Enter 发送 · Shift + Enter 换行 · 对话仅保留在当前页面</p></div>
+      </form><p className="composer-note">⌘/Ctrl + Enter 发送 · Enter 换行 · 对话仅保留在当前页面</p></div>
 
       {settingsOpen && <div className="settings-layer" role="presentation">
         <button className="settings-backdrop" type="button" aria-label="关闭模型参数" onClick={() => setSettingsOpen(false)} />
