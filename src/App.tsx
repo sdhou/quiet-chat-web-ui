@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent, KeyboardEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 type Role = "user" | "assistant";
 type Message = { id: string; role: Role; content: string; reasoning?: string; error?: boolean };
@@ -48,7 +48,9 @@ export default function Home() {
   const [settings, setSettings] = useState(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [saved, setSaved] = useState(true);
+  const firstSave = useRef(true);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [model, setModel] = useState("");
   const [online, setOnline] = useState<boolean | null>(null);
@@ -57,8 +59,12 @@ export default function Home() {
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const closeSettingsRef = useRef<HTMLButtonElement>(null);
+  const forceScroll = useRef(false);
+  const regenerateRef = useRef<() => void>(() => {});
+  const regenerate = useCallback(() => regenerateRef.current(), []);
 
   useEffect(() => {
+    if (firstSave.current) { firstSave.current = false; return; }
     setSaved(false);
     const timer = window.setTimeout(() => {
       try { localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings)); }
@@ -80,6 +86,7 @@ export default function Home() {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [settings]);
+  useEffect(() => () => abortRef.current?.abort(), []);
   useEffect(() => {
     let active = true; let timer = 0;
     async function probe() {
@@ -100,7 +107,8 @@ export default function Home() {
 
   useEffect(() => {
     const el = endRef.current;
-    if (el && el.getBoundingClientRect().top < window.innerHeight + 80) {
+    const force = forceScroll.current; forceScroll.current = false;
+    if (el && (force || el.getBoundingClientRect().top < window.innerHeight + 80)) {
       el.scrollIntoView({ behavior: "smooth", block: "end" });
     }
   }, [messages]);
@@ -115,10 +123,10 @@ export default function Home() {
     return () => { document.body.style.overflow = ""; };
   }, [settingsOpen]);
   useEffect(() => {
-    if (!confirmReset) return;
-    const timer = window.setTimeout(() => setConfirmReset(false), 3500);
+    if (!confirmReset && !confirmClear) return;
+    const timer = window.setTimeout(() => { setConfirmReset(false); setConfirmClear(false); }, 3500);
     return () => window.clearTimeout(timer);
-  }, [confirmReset]);
+  }, [confirmReset, confirmClear]);
   useEffect(() => {
     if (!settingsOpen) return;
     function closeOnEscape(event: globalThis.KeyboardEvent) {
@@ -139,15 +147,12 @@ export default function Home() {
         setSettingsOpen((open) => !open);
       } else if (key === "k") {
         event.preventDefault();
-        abortRef.current?.abort();
-        setMessages([]);
-        setInput("");
-        textareaRef.current?.focus();
+        requestClear();
       }
     }
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, []);
+  }, [confirmClear]);
 
   const updateAssistant = (messageId: string, patch: Partial<Message>) =>
     setMessages((current) => current.map((message) => message.id === messageId ? { ...message, ...patch } : message));
@@ -216,7 +221,7 @@ export default function Home() {
 
   function send() {
     const value = input.trim(); if (!value || generating || !model) return;
-    setInput("");
+    setInput(""); forceScroll.current = true;
     void complete([...messages.filter((message) => !message.error), { id: id(), role: "user", content: value }]);
   }
   function submit(event: FormEvent) { event.preventDefault(); send(); }
@@ -235,52 +240,49 @@ export default function Home() {
       send();
     }
   }
-  function clear() { abortRef.current?.abort(); setMessages([]); setInput(""); textareaRef.current?.focus(); }
-  function regenerate() {
+  function clear() { abortRef.current?.abort(); setMessages([]); setInput(""); setConfirmClear(false); textareaRef.current?.focus(); }
+  function requestClear() { if (!messages.length) return; if (confirmClear) clear(); else setConfirmClear(true); }
+  const copy = useCallback(async (text: string, copyId: string) => {
+    try {
+      await navigator.clipboard.writeText(text); setCopied(copyId);
+      window.setTimeout(() => setCopied(""), 1400);
+    } catch { /* Clipboard can be unavailable; keep the UI responsive. */ }
+  }, []);
+  regenerateRef.current = () => {
     if (generating) return;
     const index = messages.findLastIndex((message) => message.role === "user");
     if (index >= 0) void complete(messages.slice(0, index + 1));
-  }
-  async function copy(message: Message) {
-    await navigator.clipboard.writeText(message.content); setCopied(message.id);
-    window.setTimeout(() => setCopied(""), 1400);
-  }
+  };
 
   const modelLabel = model ? model.split("/").filter(Boolean).pop() : "正在连接";
+  const customized = (Object.keys(DEFAULTS) as (keyof Settings)[]).some((key) => settings[key] !== DEFAULTS[key]);
   return (
     <main className="app-shell">
       <div className="ambient ambient-one" /><div className="ambient ambient-two" />
       <header className="topbar">
         <div className="brand"><span className="brand-mark">Q</span><div><strong>Quiet</strong><span className="model-line" title={model || "正在连接模型"}><i className={`status-dot ${online === false ? "offline" : ""}`} />{online === false ? "模型离线" : modelLabel}</span></div></div>
         <div className="top-actions">
-          {messages.length > 0 && <button className="text-button" type="button" onClick={clear} aria-keyshortcuts="Control+K Meta+K" title="清空对话（⌘/Ctrl K）">清空</button>}
-          <button className="settings-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="打开模型参数" aria-keyshortcuts="Control+, Meta+," title="打开模型参数（⌘/Ctrl ,）"><span className="tune-icon" aria-hidden="true"><i /><i /><i /></span>参数</button>
+          {messages.length > 0 && <button className={`text-button ${confirmClear ? "confirming" : ""}`} type="button" onClick={requestClear} aria-keyshortcuts="Control+K Meta+K" title="清空对话（⌘/Ctrl K）">{confirmClear ? "确认清空？" : "清空"}</button>}
+          <button className="settings-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="打开模型参数" aria-keyshortcuts="Control+, Meta+," title={customized ? "打开模型参数（已调整，⌘/Ctrl ,）" : "打开模型参数（⌘/Ctrl ,）"}><span className="tune-icon" aria-hidden="true"><i /><i /><i /></span>参数{customized && <i className="tuned-dot" aria-hidden="true" />}</button>
         </div>
       </header>
 
       <section className={`conversation ${messages.length ? "active" : ""}`}>
         {messages.length === 0 ? <div className="empty-state">
           <div className="orb"><span /></div>
-        </div> : <div className="message-list" aria-live="polite">
-          {messages.map((message, index) => <article className={`message ${message.role} ${message.error ? "error" : ""}`} key={message.id} aria-busy={generating && index === messages.length - 1}>
-            <div className="message-role">{message.role === "user" ? "你" : "Q"}</div>
-            <div className="message-body">
-              {message.reasoning && <details className="reasoning"><summary>思考过程</summary><div>{message.reasoning}</div></details>}
-              {message.content ? <div className="message-content">{message.content}</div> : <div className="thinking-indicator" aria-label="正在生成"><span /><span /><span /></div>}
-              {message.role === "assistant" && message.content && <div className="message-tools"><button type="button" onClick={() => void copy(message)}>{copied === message.id ? "已复制" : "复制"}</button>{index === messages.length - 1 && !generating && <button type="button" onClick={regenerate}>重新生成</button>}</div>}
-            </div>
-          </article>)}<div ref={endRef} />
+        </div> : <div className="message-list">
+          {messages.map((message, index) => <MessageItem key={message.id} message={message} isLast={index === messages.length - 1} generating={generating} copied={copied === message.id || copied.startsWith(`${message.id}:`) ? copied : ""} copy={copy} regenerate={regenerate} />)}<div ref={endRef} />
         </div>}
       </section>
 
+      <p className="sr-only" aria-live="polite">{generating ? "正在生成回复" : ""}</p>
+
       <div className="composer-wrap"><form className="composer" onSubmit={submit}>
-        <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keydown} placeholder={online === false ? "模型服务未连接" : "输入消息…"} rows={1} disabled={online === false} aria-label="聊天消息" />
+        <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keydown} spellCheck={false} autoComplete="off" enterKeyHint="send" placeholder={online === false ? "模型服务未连接" : generating ? "生成中，Esc 停止…" : "输入消息…"} rows={1} aria-label="聊天消息" />
         {generating ? <button className="send-button stop" type="button" onClick={() => abortRef.current?.abort()} aria-label="停止生成" title="停止生成（Esc）"><span /></button> : <button className="send-button" type="submit" disabled={!input.trim() || !model} aria-label="发送消息" title="发送消息（Enter）">↑</button>}
       </form><p className="composer-note">
         <span><kbd>Enter</kbd>发送 · <kbd>⌘/Ctrl</kbd><kbd>Enter</kbd>换行</span>
-        <span><kbd>⌘/Ctrl</kbd><kbd>,</kbd>参数</span>
-        <span><kbd>⌘/Ctrl</kbd><kbd>K</kbd>清空</span>
-        <span><kbd>Esc</kbd>{generating ? "停止生成" : "关闭面板"}</span>
+        {generating && <span><kbd>Esc</kbd>停止生成</span>}
       </p></div>
 
       {settingsOpen && <div className="settings-layer" role="presentation">
@@ -312,6 +314,31 @@ export default function Home() {
   );
 }
 
+const MessageItem = memo(function MessageItem({ message, isLast, generating, copied, copy, regenerate }:
+  { message: Message; isLast: boolean; generating: boolean; copied: string; copy: (text: string, copyId: string) => void; regenerate: () => void }) {
+  return <article className={`message ${message.role} ${message.error ? "error" : ""}`} aria-busy={generating && isLast}>
+    <div className="message-role">{message.role === "user" ? "你" : "Q"}</div>
+    <div className="message-body">
+      {message.reasoning && <details className="reasoning"><summary>{generating && isLast && !message.content ? "思考中…" : "思考过程"}</summary><div>{message.reasoning}</div></details>}
+      {message.content ? <div className="message-content"><Content text={message.content} id={message.id} copy={copy} copied={copied} /></div> : <div className="thinking-indicator" aria-label="正在生成"><span /><span /><span /></div>}
+      {message.content && <div className="message-tools"><button type="button" onClick={() => void copy(message.content, message.id)}>{copied === message.id ? "已复制" : "复制"}</button>{message.role === "assistant" && isLast && !generating && <button type="button" onClick={regenerate}>重新生成</button>}</div>}
+    </div>
+  </article>;
+});
+function Content({ text, id, copy, copied }: { text: string; id: string; copy: (text: string, copyId: string) => void; copied: string }) {
+  return <>{text.split("```").map((part, index) => {
+    if (index % 2 === 0) return <span key={index}>{part.split(/(`[^`\n]+`)/g).map((piece, position) =>
+      piece.length > 2 && piece.startsWith("`") && piece.endsWith("`") ? <code key={position}>{piece.slice(1, -1)}</code> : piece)}</span>;
+    const [, lang = "", body] = part.match(/^([a-zA-Z0-9+#-]*)\r?\n([\s\S]*)$/) ?? [];
+    const code = lang ? body : part;
+    const codeId = `${id}:${index}`;
+    return <pre key={index} className={`code-block${lang ? " with-lang" : ""}`}>
+      {lang && <span className="code-lang">{lang}</span>}
+      <button type="button" className="code-copy" onClick={() => copy(code, codeId)}>{copied === codeId ? "已复制" : "复制"}</button>
+      <code>{code}</code>
+    </pre>;
+  })}</>;
+}
 function Toggle({ label, hint, checked, change }: { label: string; hint: string; checked: boolean; change: (value: boolean) => void }) {
   return <label className="toggle-field"><span><strong>{label}</strong><small>{hint}</small></span><input type="checkbox" checked={checked} onChange={(e) => change(e.target.checked)} /><i aria-hidden="true" /></label>;
 }
@@ -319,5 +346,12 @@ function Range({ label, value, min, max, step, change }: { label: string; value:
   return <label className="range-field"><span><strong>{label}</strong><output>{value}</output></span><input type="range" value={value} min={min} max={max} step={step} onChange={(e) => change(Number(e.target.value))} /></label>;
 }
 function NumberInput({ label, value, min, max, step = 1, disabled = false, change }: { label: string; value: number; min: number; max: number; step?: number; disabled?: boolean; change: (value: number) => void }) {
-  return <label className={`number-field ${disabled ? "disabled" : ""}`}><strong>{label}</strong><input type="number" value={value} min={min} max={max} step={step} disabled={disabled} onChange={(e) => { const next = Number(e.target.value); if (Number.isFinite(next)) change(Math.min(Math.max(next, min), max)); }} /></label>;
+  const [draft, setDraft] = useState<string | null>(null);
+  return <label className={`number-field ${disabled ? "disabled" : ""}`}><strong>{label}</strong><input type="number" value={draft ?? String(value)} min={min} max={max} step={step} disabled={disabled}
+    onChange={(e) => {
+      setDraft(e.target.value);
+      const next = Number(e.target.value);
+      if (e.target.value !== "" && Number.isFinite(next)) change(Math.min(Math.max(next, min), max));
+    }}
+    onBlur={() => setDraft(null)} /></label>;
 }
