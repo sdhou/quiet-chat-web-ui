@@ -33,7 +33,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,summary:focus-vi
 .orb { position:relative; display:grid; place-items:center; width:74px; height:74px; margin-bottom:30px; border:1px solid rgba(201,255,99,.22); border-radius:26px; background:rgba(201,255,99,.055); transform:rotate(12deg); }
 .orb::before,.orb::after,.orb span { content:""; position:absolute; border-radius:50%; }
 .orb::before { inset:17px; border:1px solid rgba(201,255,99,.5); } .orb::after { inset:27px; background:var(--accent); box-shadow:0 0 22px rgba(201,255,99,.55); }
-.orb span { inset:-10px; border:1px dashed rgba(201,255,99,.14); animation:orbit 18s linear infinite; }
+.orb span { inset:-10px; border:1px dashed rgba(201,255,99,.14); }
 .message-list { width:min(100%,820px); margin:0 auto; }
 .message { display:grid; grid-template-columns:36px minmax(0,1fr); gap:15px; margin:0 0 34px; animation:message-in 260ms ease both; }
 .message.user { grid-template-columns:minmax(0,1fr) 36px; padding-left:clamp(0px,10vw,110px); }
@@ -98,7 +98,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,summary:focus-vi
 .save-state { display:flex; align-items:center; gap:6px; color:var(--dim); font-size:11px; }
 .save-state::before { content:""; width:5px; height:5px; border-radius:50%; background:#3d423c; transition:170ms ease; }
 .save-state.saved::before { background:var(--accent); box-shadow:0 0 8px rgba(201,255,99,.55); }
-@keyframes reveal { from { opacity:0; transform:translateY(12px); } } @keyframes message-in { from { opacity:0; transform:translateY(6px); } } @keyframes fade-in { from { opacity:0; } } @keyframes panel-in { from { opacity:0; transform:translateX(24px); } } @keyframes orbit { to { transform:rotate(360deg); } }
+@keyframes reveal { from { opacity:0; transform:translateY(12px); } } @keyframes message-in { from { opacity:0; transform:translateY(6px); } } @keyframes fade-in { from { opacity:0; } } @keyframes panel-in { from { opacity:0; transform:translateX(24px); } }
 @keyframes blink { 0%,70%,100% { opacity:.2; transform:translateY(0); } 35% { opacity:1; transform:translateY(-3px); } }
 
 @media (max-width:640px) {
