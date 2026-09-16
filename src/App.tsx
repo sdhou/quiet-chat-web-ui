@@ -51,7 +51,6 @@ export default function Home() {
   const [saved, setSaved] = useState(true);
   const firstSave = useRef(true);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [model, setModel] = useState("");
   const [online, setOnline] = useState<boolean | null>(null);
@@ -131,10 +130,10 @@ export default function Home() {
     if (shortcutsOpen) closeShortcutsRef.current?.focus();
   }, [shortcutsOpen]);
   useEffect(() => {
-    if (!confirmReset && !confirmClear) return;
-    const timer = window.setTimeout(() => { setConfirmReset(false); setConfirmClear(false); }, 3500);
+    if (!confirmReset) return;
+    const timer = window.setTimeout(() => setConfirmReset(false), 3500);
     return () => window.clearTimeout(timer);
-  }, [confirmReset, confirmClear]);
+  }, [confirmReset]);
   useEffect(() => {
     if (!settingsOpen && !shortcutsOpen) return;
     function closeOnEscape(event: globalThis.KeyboardEvent) {
@@ -173,12 +172,12 @@ export default function Home() {
         setSettingsOpen((open) => !open);
       } else if (key === "k") {
         event.preventDefault();
-        requestClear();
+        clear();
       }
     }
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [confirmClear]);
+  }, [messages.length]);
 
   const updateAssistant = (messageId: string, patch: Partial<Message>) =>
     setMessages((current) => current.map((message) => message.id === messageId ? { ...message, ...patch } : message));
@@ -266,8 +265,7 @@ export default function Home() {
       send();
     }
   }
-  function clear() { abortRef.current?.abort(); setMessages([]); setInput(""); setConfirmClear(false); textareaRef.current?.focus(); }
-  function requestClear() { if (!messages.length) return; if (confirmClear) clear(); else setConfirmClear(true); }
+  function clear() { abortRef.current?.abort(); setMessages([]); setInput(""); textareaRef.current?.focus(); }
   const copy = useCallback(async (text: string, copyId: string) => {
     try {
       await navigator.clipboard.writeText(text); setCopied(copyId);
@@ -288,7 +286,7 @@ export default function Home() {
       <header className="topbar">
         <div className="brand"><span className="brand-mark">Q</span><div><strong>Quiet</strong><span className="model-line" title={model || "Connecting to model"}><i className={`status-dot ${online === false ? "offline" : ""}`} />{online === false ? "Model offline" : modelLabel}</span></div></div>
         <div className="top-actions">
-          {messages.length > 0 && <button className={`text-button ${confirmClear ? "confirming" : ""}`} type="button" onClick={requestClear} aria-keyshortcuts="Control+K Meta+K" title="Clear conversation (⌘/Ctrl K)">{confirmClear ? "Confirm clear?" : "Clear"}</button>}
+          {messages.length > 0 && <button className="text-button" type="button" onClick={clear} aria-keyshortcuts="Control+K Meta+K" title="Clear conversation (⌘/Ctrl K)">Clear</button>}
           <button className="shortcuts-button" type="button" ref={shortcutsButtonRef} onClick={() => setShortcutsOpen(true)} aria-label="View keyboard shortcuts" aria-haspopup="dialog" aria-keyshortcuts="?" title="Keyboard shortcuts (?)">?</button>
           <button className="settings-button" type="button" onClick={() => setSettingsOpen(true)} aria-label={hasUnsavedSettings ? "Open model settings, unsaved changes" : "Open model settings"} aria-keyshortcuts="Control+, Meta+," title={hasUnsavedSettings ? "Open model settings (unsaved changes, ⌘/Ctrl ,)" : "Open model settings (⌘/Ctrl ,)"}><span className="tune-icon" aria-hidden="true"><i /><i /><i /></span>SET{hasUnsavedSettings && <i className="tuned-dot" aria-hidden="true" />}</button>
         </div>
