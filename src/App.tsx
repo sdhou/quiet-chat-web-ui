@@ -47,6 +47,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [settings, setSettings] = useState(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [saved, setSaved] = useState(true);
   const firstSave = useRef(true);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -59,6 +60,8 @@ export default function Home() {
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const closeSettingsRef = useRef<HTMLButtonElement>(null);
+  const shortcutsButtonRef = useRef<HTMLButtonElement>(null);
+  const closeShortcutsRef = useRef<HTMLButtonElement>(null);
   const forceScroll = useRef(false);
   const regenerateRef = useRef<() => void>(() => {});
   const regenerate = useCallback(() => regenerateRef.current(), []);
@@ -117,29 +120,52 @@ export default function Home() {
     el.style.height = "0px"; el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [input]);
   useEffect(() => {
-    document.body.style.overflow = settingsOpen ? "hidden" : "";
+    document.body.style.overflow = settingsOpen || shortcutsOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [settingsOpen, shortcutsOpen]);
+  useEffect(() => {
     if (settingsOpen) closeSettingsRef.current?.focus(); else textareaRef.current?.focus();
     if (!settingsOpen) setConfirmReset(false);
-    return () => { document.body.style.overflow = ""; };
   }, [settingsOpen]);
+  useEffect(() => {
+    if (shortcutsOpen) closeShortcutsRef.current?.focus();
+  }, [shortcutsOpen]);
   useEffect(() => {
     if (!confirmReset && !confirmClear) return;
     const timer = window.setTimeout(() => { setConfirmReset(false); setConfirmClear(false); }, 3500);
     return () => window.clearTimeout(timer);
   }, [confirmReset, confirmClear]);
   useEffect(() => {
-    if (!settingsOpen) return;
+    if (!settingsOpen && !shortcutsOpen) return;
     function closeOnEscape(event: globalThis.KeyboardEvent) {
+      if (shortcutsOpen && event.key === "Tab") {
+        event.preventDefault();
+        closeShortcutsRef.current?.focus();
+        return;
+      }
       if (event.key !== "Escape" && event.key !== "Esc" && event.code !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
-      setSettingsOpen(false);
+      if (shortcutsOpen) {
+        setShortcutsOpen(false);
+        window.setTimeout(() => shortcutsButtonRef.current?.focus());
+      } else {
+        setSettingsOpen(false);
+      }
     }
     document.addEventListener("keydown", closeOnEscape, true);
     return () => document.removeEventListener("keydown", closeOnEscape, true);
-  }, [settingsOpen]);
+  }, [settingsOpen, shortcutsOpen]);
   useEffect(() => {
     function handleShortcut(event: globalThis.KeyboardEvent) {
+      const target = event.target;
+      const editing = target instanceof HTMLElement && (target.isContentEditable || target.matches("input, textarea, select"));
+      if (event.key === "?" && !event.metaKey && !event.ctrlKey && !event.altKey && !editing) {
+        event.preventDefault();
+        setSettingsOpen(false);
+        setShortcutsOpen(true);
+        return;
+      }
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
       const key = event.key.toLowerCase();
       if (key === ",") {
@@ -184,13 +210,13 @@ export default function Home() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body), signal: controller.signal,
       });
-      if (!response.ok) throw new Error((await response.text()) || `请求失败 (${response.status})`);
+      if (!response.ok) throw new Error((await response.text()) || `Request failed (${response.status})`);
 
       if (!settings.stream) {
         const data = await response.json(); const reply = data?.choices?.[0]?.message;
         updateAssistant(assistantId, { content: textOf(reply?.content), reasoning: textOf(reply?.reasoning_content ?? reply?.reasoning) });
       } else {
-        if (!response.body) throw new Error("服务未返回数据流");
+        if (!response.body) throw new Error("The service returned no data stream");
         const reader = response.body.getReader(); const decoder = new TextDecoder();
         let buffer = "", content = "", reasoning = "";
         while (true) {
@@ -215,7 +241,7 @@ export default function Home() {
         setMessages((current) => current.filter((message) => message.id !== assistantId || message.content));
         return;
       }
-      updateAssistant(assistantId, { content: `连接模型时出现问题：${error instanceof Error ? error.message : "未知错误"}`, error: true });
+      updateAssistant(assistantId, { content: `There was a problem connecting to the model: ${error instanceof Error ? error.message : "Unknown error"}`, error: true });
     } finally { setGenerating(false); abortRef.current = null; }
   }
 
@@ -254,16 +280,17 @@ export default function Home() {
     if (index >= 0) void complete(messages.slice(0, index + 1));
   };
 
-  const modelLabel = model ? model.split("/").filter(Boolean).pop() : "正在连接";
-  const customized = (Object.keys(DEFAULTS) as (keyof Settings)[]).some((key) => settings[key] !== DEFAULTS[key]);
+  const modelLabel = model ? model.split("/").filter(Boolean).pop() : "Connecting";
+  const hasUnsavedSettings = !saved;
   return (
     <main className="app-shell">
       <div className="ambient ambient-one" /><div className="ambient ambient-two" />
       <header className="topbar">
-        <div className="brand"><span className="brand-mark">Q</span><div><strong>Quiet</strong><span className="model-line" title={model || "正在连接模型"}><i className={`status-dot ${online === false ? "offline" : ""}`} />{online === false ? "模型离线" : modelLabel}</span></div></div>
+        <div className="brand"><span className="brand-mark">Q</span><div><strong>Quiet</strong><span className="model-line" title={model || "Connecting to model"}><i className={`status-dot ${online === false ? "offline" : ""}`} />{online === false ? "Model offline" : modelLabel}</span></div></div>
         <div className="top-actions">
-          {messages.length > 0 && <button className={`text-button ${confirmClear ? "confirming" : ""}`} type="button" onClick={requestClear} aria-keyshortcuts="Control+K Meta+K" title="清空对话（⌘/Ctrl K）">{confirmClear ? "确认清空？" : "清空"}</button>}
-          <button className="settings-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="打开模型参数" aria-keyshortcuts="Control+, Meta+," title={customized ? "打开模型参数（已调整，⌘/Ctrl ,）" : "打开模型参数（⌘/Ctrl ,）"}><span className="tune-icon" aria-hidden="true"><i /><i /><i /></span>参数{customized && <i className="tuned-dot" aria-hidden="true" />}</button>
+          {messages.length > 0 && <button className={`text-button ${confirmClear ? "confirming" : ""}`} type="button" onClick={requestClear} aria-keyshortcuts="Control+K Meta+K" title="Clear conversation (⌘/Ctrl K)">{confirmClear ? "Confirm clear?" : "Clear"}</button>}
+          <button className="shortcuts-button" type="button" ref={shortcutsButtonRef} onClick={() => setShortcutsOpen(true)} aria-label="View keyboard shortcuts" aria-haspopup="dialog" aria-keyshortcuts="?" title="Keyboard shortcuts (?)">?</button>
+          <button className="settings-button" type="button" onClick={() => setSettingsOpen(true)} aria-label={hasUnsavedSettings ? "Open model settings, unsaved changes" : "Open model settings"} aria-keyshortcuts="Control+, Meta+," title={hasUnsavedSettings ? "Open model settings (unsaved changes, ⌘/Ctrl ,)" : "Open model settings (⌘/Ctrl ,)"}><span className="tune-icon" aria-hidden="true"><i /><i /><i /></span>SET{hasUnsavedSettings && <i className="tuned-dot" aria-hidden="true" />}</button>
         </div>
       </header>
 
@@ -275,27 +302,39 @@ export default function Home() {
         </div>}
       </section>
 
-      <p className="sr-only" aria-live="polite">{generating ? "正在生成回复" : ""}</p>
+      <p className="sr-only" aria-live="polite">{generating ? "Generating response" : ""}</p>
 
       <div className="composer-wrap"><form className="composer" onSubmit={submit}>
-        <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keydown} spellCheck={false} autoComplete="off" enterKeyHint="send" placeholder={online === false ? "模型服务未连接" : generating ? "生成中，Esc 停止…" : "输入消息…"} rows={1} aria-label="聊天消息" />
-        {generating ? <button className="send-button stop" type="button" onClick={() => abortRef.current?.abort()} aria-label="停止生成" title="停止生成（Esc）"><span /></button> : <button className="send-button" type="submit" disabled={!input.trim() || !model} aria-label="发送消息" title="发送消息（Enter）">↑</button>}
-      </form><p className="composer-note">
-        <span><kbd>Enter</kbd>发送 · <kbd>⌘/Ctrl</kbd><kbd>Enter</kbd>换行</span>
-        {generating && <span><kbd>Esc</kbd>停止生成</span>}
-      </p></div>
+        <textarea ref={textareaRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={keydown} spellCheck={false} autoComplete="off" enterKeyHint="send" placeholder={online === false ? "Model service unavailable" : generating ? "Generating, press Esc to stop…" : "Type a message…"} rows={1} aria-label="Chat message" />
+        {generating ? <button className="send-button stop" type="button" onClick={() => abortRef.current?.abort()} aria-label="Stop generating" title="Stop generating (Esc)"><span /></button> : <button className="send-button" type="submit" disabled={!input.trim() || !model} aria-label="Send message" title="Send message (Enter)">↑</button>}
+      </form></div>
+
+      {shortcutsOpen && <div className="shortcuts-layer" role="presentation">
+        <button className="shortcuts-backdrop" type="button" tabIndex={-1} aria-label="Close keyboard shortcuts" onClick={() => { setShortcutsOpen(false); shortcutsButtonRef.current?.focus(); }} />
+        <section className="shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+          <div className="shortcuts-header"><div><span>QUICK KEYS</span><h2 id="shortcuts-title">Keyboard Shortcuts</h2></div><button className="close-button" type="button" ref={closeShortcutsRef} onClick={() => { setShortcutsOpen(false); shortcutsButtonRef.current?.focus(); }} aria-label="Close" aria-keyshortcuts="Escape" title="Close (Esc)">×</button></div>
+          <dl className="shortcut-list">
+            <div><dt>Send message</dt><dd><kbd>Enter</kbd></dd></div>
+            <div><dt>Insert line break</dt><dd><kbd>⌘/Ctrl</kbd><kbd>Enter</kbd></dd></div>
+            <div><dt>Stop generating</dt><dd><kbd>Esc</kbd></dd></div>
+            <div><dt>Clear conversation</dt><dd><kbd>⌘/Ctrl</kbd><kbd>K</kbd></dd></div>
+            <div><dt>Model settings</dt><dd><kbd>⌘/Ctrl</kbd><kbd>,</kbd></dd></div>
+            <div><dt>Shortcut help</dt><dd><kbd>?</kbd></dd></div>
+          </dl>
+        </section>
+      </div>}
 
       {settingsOpen && <div className="settings-layer" role="presentation">
-        <button className="settings-backdrop" type="button" aria-label="关闭模型参数" onClick={() => setSettingsOpen(false)} />
-        <aside className="settings-panel" role="dialog" aria-modal="true" aria-label="模型参数">
-          <div className="panel-header"><h2>模型参数</h2><button className="close-button" type="button" ref={closeSettingsRef} onClick={() => setSettingsOpen(false)} aria-label="关闭" aria-keyshortcuts="Escape" title="关闭（Esc）">×</button></div>
+        <button className="settings-backdrop" type="button" aria-label="Close model settings" onClick={() => setSettingsOpen(false)} />
+        <aside className="settings-panel" role="dialog" aria-modal="true" aria-label="Model settings">
+          <div className="panel-header"><h2>Model Settings</h2><button className="close-button" type="button" ref={closeSettingsRef} onClick={() => setSettingsOpen(false)} aria-label="Close" aria-keyshortcuts="Escape" title="Close (Esc)">×</button></div>
           <div className="panel-scroll">
-            <label className="field"><span>System Prompt</span><textarea value={settings.systemPrompt} onChange={(e) => update("systemPrompt", e.target.value)} placeholder="例如：回答保持准确、简洁。" rows={4} /></label>
-            <Toggle label="流式输出" hint="实时显示模型生成内容" checked={settings.stream} change={(stream) => update("stream", stream)} />
+            <label className="field"><span>System Prompt</span><textarea value={settings.systemPrompt} onChange={(e) => update("systemPrompt", e.target.value)} placeholder="For example: Keep answers accurate and concise." rows={4} /></label>
+            <Toggle label="Streaming" hint="Display model output as it is generated" checked={settings.stream} change={(stream) => update("stream", stream)} />
             <Range label="Temperature" value={settings.temperature} min={0} max={2} step={0.05} change={(temperature) => update("temperature", temperature)} />
             <Range label="Top P" value={settings.topP} min={0} max={1} step={0.05} change={(topP) => update("topP", topP)} />
             <NumberInput label="Max Tokens" value={settings.maxTokens} min={1} max={32768} change={(maxTokens) => update("maxTokens", maxTokens)} />
-            <Toggle label="Thinking" hint="显示可折叠的思考内容" checked={settings.enableThinking} change={(enableThinking) => update("enableThinking", enableThinking)} />
+            <Toggle label="Thinking" hint="Show reasoning in a collapsible section" checked={settings.enableThinking} change={(enableThinking) => update("enableThinking", enableThinking)} />
             <NumberInput label="Thinking Budget" value={settings.thinkingBudget} min={1} max={32768} disabled={!settings.enableThinking} change={(thinkingBudget) => update("thinkingBudget", thinkingBudget)} />
             <NumberInput label="Top K" value={settings.topK} min={0} max={1000} change={(topK) => update("topK", topK)} />
             <Range label="Min P" value={settings.minP} min={0} max={1} step={0.01} change={(minP) => update("minP", minP)} />
@@ -305,8 +344,8 @@ export default function Home() {
             <NumberInput label="Seed" value={settings.seed} min={0} max={2147483647} change={(seed) => update("seed", seed)} />
           </div>
           <div className="panel-footer">
-            <button className={`reset-button ${confirmReset ? "confirming" : ""}`} type="button" onClick={() => { if (confirmReset) { setSettings(DEFAULTS); setConfirmReset(false); } else setConfirmReset(true); }}>{confirmReset ? "确认恢复？" : "恢复默认"}</button>
-            <span className={`save-state ${saved ? "saved" : ""}`} aria-live="polite">{saved ? "已保存" : "保存中…"}</span>
+            <button className={`reset-button ${confirmReset ? "confirming" : ""}`} type="button" onClick={() => { if (confirmReset) { setSettings(DEFAULTS); setConfirmReset(false); } else setConfirmReset(true); }}>{confirmReset ? "Confirm reset?" : "Restore defaults"}</button>
+            <span className={`save-state ${saved ? "saved" : ""}`} aria-live="polite">{saved ? "Saved" : "Saving…"}</span>
           </div>
         </aside>
       </div>}
@@ -317,11 +356,11 @@ export default function Home() {
 const MessageItem = memo(function MessageItem({ message, isLast, generating, copied, copy, regenerate }:
   { message: Message; isLast: boolean; generating: boolean; copied: string; copy: (text: string, copyId: string) => void; regenerate: () => void }) {
   return <article className={`message ${message.role} ${message.error ? "error" : ""}`} aria-busy={generating && isLast}>
-    <div className="message-role">{message.role === "user" ? "你" : "Q"}</div>
+    <div className="message-role">{message.role === "user" ? "You" : "Q"}</div>
     <div className="message-body">
-      {message.reasoning && <details className="reasoning"><summary>{generating && isLast && !message.content ? "思考中…" : "思考过程"}</summary><div>{message.reasoning}</div></details>}
-      {message.content ? <div className="message-content"><Content text={message.content} id={message.id} copy={copy} copied={copied} /></div> : <div className="thinking-indicator" aria-label="正在生成"><span /><span /><span /></div>}
-      {message.content && <div className="message-tools"><button type="button" onClick={() => void copy(message.content, message.id)}>{copied === message.id ? "已复制" : "复制"}</button>{message.role === "assistant" && isLast && !generating && <button type="button" onClick={regenerate}>重新生成</button>}</div>}
+      {message.reasoning && <details className="reasoning"><summary>{generating && isLast && !message.content ? "Thinking…" : "Reasoning"}</summary><div>{message.reasoning}</div></details>}
+      {message.content ? <div className="message-content"><Content text={message.content} id={message.id} copy={copy} copied={copied} /></div> : <div className="thinking-indicator" aria-label="Generating"><span /><span /><span /></div>}
+      {message.content && <div className="message-tools"><button type="button" onClick={() => void copy(message.content, message.id)}>{copied === message.id ? "Copied" : "Copy"}</button>{message.role === "assistant" && isLast && !generating && <button type="button" onClick={regenerate}>Regenerate</button>}</div>}
     </div>
   </article>;
 });
@@ -334,7 +373,7 @@ function Content({ text, id, copy, copied }: { text: string; id: string; copy: (
     const codeId = `${id}:${index}`;
     return <pre key={index} className={`code-block${lang ? " with-lang" : ""}`}>
       {lang && <span className="code-lang">{lang}</span>}
-      <button type="button" className="code-copy" onClick={() => copy(code, codeId)}>{copied === codeId ? "已复制" : "复制"}</button>
+      <button type="button" className="code-copy" onClick={() => copy(code, codeId)}>{copied === codeId ? "Copied" : "Copy"}</button>
       <code>{code}</code>
     </pre>;
   })}</>;
