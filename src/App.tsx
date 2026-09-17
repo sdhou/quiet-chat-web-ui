@@ -92,16 +92,17 @@ export default function Home() {
   useEffect(() => {
     let active = true; let timer = 0;
     async function probe() {
+      let nextModel = "";
       try {
         const response = await fetch("/api/models", { cache: "no-store" });
         if (!response.ok) throw new Error();
         const data = await response.json();
-        if (!active) return;
-        setModel(data?.data?.[0]?.id ?? ""); setOnline(true);
-      } catch {
-        if (!active) return;
-        setOnline(false); timer = window.setTimeout(probe, 5000);
-      }
+        nextModel = data?.data?.[0]?.id ?? "";
+      } catch { /* An unreachable service is simply an unavailable model. */ }
+      if (!active) return;
+      setModel(nextModel);
+      setOnline(Boolean(nextModel));
+      timer = window.setTimeout(probe, 5000);
     }
     void probe();
     return () => { active = false; window.clearTimeout(timer); };
@@ -288,7 +289,7 @@ export default function Home() {
     <main className="app-shell">
       <div className="ambient ambient-one" /><div className="ambient ambient-two" />
       <header className="topbar">
-        <div className="brand"><span className="brand-mark">Q</span><div><strong>Quiet</strong><span className="model-line" title={model || "Connecting to model"}><i className={`status-dot ${online === false ? "offline" : ""}`} />{online === false ? "Model offline" : modelLabel}</span></div></div>
+        <div className="brand"><span className="brand-mark">Q</span><div><strong>Quiet</strong><span className="model-line" title={online === false ? "Model service unavailable" : model || "Connecting to model"}><i className={`status-dot ${online === false ? "offline" : ""}`} />{online === false ? "Model offline" : modelLabel}</span></div></div>
         <div className="top-actions">
           {messages.length > 0 && <button className="text-button" type="button" onClick={clear} aria-keyshortcuts="Control+K Meta+K" title="Clear conversation (⌘/Ctrl K)">Clear</button>}
           <button className="shortcuts-button" type="button" ref={shortcutsButtonRef} onClick={() => setShortcutsOpen(true)} aria-label="View keyboard shortcuts" aria-haspopup="dialog" aria-keyshortcuts="?" title="Keyboard shortcuts (?)">?</button>
