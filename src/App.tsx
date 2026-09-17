@@ -56,12 +56,12 @@ export default function Home() {
   const [online, setOnline] = useState<boolean | null>(null);
   const [copied, setCopied] = useState("");
   const abortRef = useRef<AbortController | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const conversationRef = useRef<HTMLElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const closeSettingsRef = useRef<HTMLButtonElement>(null);
   const shortcutsButtonRef = useRef<HTMLButtonElement>(null);
   const closeShortcutsRef = useRef<HTMLButtonElement>(null);
-  const forceScroll = useRef(false);
+  const pinRef = useRef<string | null>(null);
   const regenerateRef = useRef<() => void>(() => {});
   const regenerate = useCallback(() => regenerateRef.current(), []);
 
@@ -108,11 +108,14 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const el = endRef.current;
-    const force = forceScroll.current; forceScroll.current = false;
-    if (el && (force || el.getBoundingClientRect().top < window.innerHeight + 80)) {
-      el.scrollIntoView({ behavior: "smooth", block: "end" });
-    }
+    const container = conversationRef.current;
+    const targetId = pinRef.current; pinRef.current = null;
+    if (!container || !targetId) return;
+    const target = container.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(targetId)}"]`);
+    if (!target) return;
+    const offset = parseFloat(getComputedStyle(container).paddingTop) || 0;
+    const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    container.scrollTo({ top: Math.max(0, container.scrollTop + delta - offset), behavior: "smooth" });
   }, [messages]);
   useEffect(() => {
     const el = textareaRef.current; if (!el) return;
@@ -184,11 +187,12 @@ export default function Home() {
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     setSettings((current) => ({ ...current, [key]: value }));
 
-  async function complete(conversation: Message[]) {
+  async function complete(conversation: Message[], pin: "user" | "reply" = "user") {
     if (!model || generating) return;
     const assistantId = id();
     const controller = new AbortController(); abortRef.current = controller;
     setGenerating(true);
+    pinRef.current = pin === "reply" ? assistantId : conversation[conversation.length - 1]?.id ?? null;
     setMessages([...conversation, { id: assistantId, role: "assistant", content: "" }]);
 
     const apiMessages: { role: string; content: string }[] = conversation.map(({ role, content }) => ({ role, content }));
@@ -246,7 +250,7 @@ export default function Home() {
 
   function send() {
     const value = input.trim(); if (!value || generating || !model) return;
-    setInput(""); forceScroll.current = true;
+    setInput("");
     void complete([...messages.filter((message) => !message.error), { id: id(), role: "user", content: value }]);
   }
   function submit(event: FormEvent) { event.preventDefault(); send(); }
@@ -275,7 +279,7 @@ export default function Home() {
   regenerateRef.current = () => {
     if (generating) return;
     const index = messages.findLastIndex((message) => message.role === "user");
-    if (index >= 0) void complete(messages.slice(0, index + 1));
+    if (index >= 0) void complete(messages.slice(0, index + 1), "reply");
   };
 
   const modelLabel = model ? model.split("/").filter(Boolean).pop() : "Connecting";
@@ -292,11 +296,11 @@ export default function Home() {
         </div>
       </header>
 
-      <section className={`conversation ${messages.length ? "active" : ""}`}>
+      <section className={`conversation ${messages.length ? "active" : ""}`} ref={conversationRef}>
         {messages.length === 0 ? <div className="empty-state">
           <div className="orb"><span /></div>
         </div> : <div className="message-list">
-          {messages.map((message, index) => <MessageItem key={message.id} message={message} isLast={index === messages.length - 1} generating={generating} copied={copied === message.id || copied.startsWith(`${message.id}:`) ? copied : ""} copy={copy} regenerate={regenerate} />)}<div ref={endRef} />
+          {messages.map((message, index) => <MessageItem key={message.id} message={message} isLast={index === messages.length - 1} generating={generating} copied={copied === message.id || copied.startsWith(`${message.id}:`) ? copied : ""} copy={copy} regenerate={regenerate} />)}
         </div>}
       </section>
 
@@ -353,7 +357,7 @@ export default function Home() {
 
 const MessageItem = memo(function MessageItem({ message, isLast, generating, copied, copy, regenerate }:
   { message: Message; isLast: boolean; generating: boolean; copied: string; copy: (text: string, copyId: string) => void; regenerate: () => void }) {
-  return <article className={`message ${message.role} ${message.error ? "error" : ""}`} aria-busy={generating && isLast}>
+  return <article className={`message ${message.role} ${message.error ? "error" : ""}`} data-message-id={message.id} aria-busy={generating && isLast}>
     <div className="message-role">{message.role === "user" ? "You" : "Q"}</div>
     <div className="message-body">
       {message.reasoning && <details className="reasoning"><summary>{generating && isLast && !message.content ? "Thinking…" : "Reasoning"}</summary><div>{message.reasoning}</div></details>}
