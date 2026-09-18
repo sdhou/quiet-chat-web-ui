@@ -19,6 +19,8 @@ const DEFAULTS: Settings = {
   stream: true,
 };
 const SETTINGS_STORAGE_KEY = "model-settings";
+const MODEL_PROBE_INTERVAL_MS = 30_000;
+const MODEL_PROBE_RETRY_INTERVAL_MS = 5_000;
 
 function loadSettings(): Settings {
   try {
@@ -102,7 +104,10 @@ export default function Home() {
       if (!active) return;
       setModel(nextModel);
       setOnline(Boolean(nextModel));
-      timer = window.setTimeout(probe, 5000);
+      timer = window.setTimeout(
+        probe,
+        nextModel ? MODEL_PROBE_INTERVAL_MS : MODEL_PROBE_RETRY_INTERVAL_MS,
+      );
     }
     void probe();
     return () => { active = false; window.clearTimeout(timer); };
