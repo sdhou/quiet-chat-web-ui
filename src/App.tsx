@@ -57,6 +57,8 @@ export default function Home() {
   const [model, setModel] = useState("");
   const [online, setOnline] = useState<boolean | null>(null);
   const [copied, setCopied] = useState("");
+  const [editingId, setEditingId] = useState("");
+  const [editDraft, setEditDraft] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const conversationRef = useRef<HTMLElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -258,6 +260,7 @@ export default function Home() {
   function send() {
     const value = input.trim(); if (!value || generating || !model) return;
     setInput("");
+    setEditingId(""); setEditDraft("");
     void complete([...messages.filter((message) => !message.error), { id: id(), role: "user", content: value }]);
   }
   function submit(event: FormEvent) { event.preventDefault(); send(); }
@@ -276,7 +279,22 @@ export default function Home() {
       send();
     }
   }
-  function clear() { abortRef.current?.abort(); setMessages([]); setInput(""); textareaRef.current?.focus(); }
+  function clear() { abortRef.current?.abort(); setMessages([]); setInput(""); setEditingId(""); setEditDraft(""); textareaRef.current?.focus(); }
+  function startEditing(message: Message) {
+    if (generating || message.role !== "user") return;
+    setEditingId(message.id); setEditDraft(message.content);
+  }
+  function cancelEditing() { setEditingId(""); setEditDraft(""); }
+  function submitEdit(messageId: string) {
+    const content = editDraft.trim();
+    if (!content || generating || !model) return;
+    const index = messages.findIndex((message) => message.id === messageId && message.role === "user");
+    if (index < 0) return;
+    const editedMessage = { ...messages[index], content };
+    const conversation = [...messages.slice(0, index).filter((message) => !message.error), editedMessage];
+    cancelEditing();
+    void complete(conversation);
+  }
   const copy = useCallback(async (text: string, copyId: string) => {
     try {
       await navigator.clipboard.writeText(text); setCopied(copyId);
@@ -286,7 +304,7 @@ export default function Home() {
   regenerateRef.current = () => {
     if (generating) return;
     const index = messages.findLastIndex((message) => message.role === "user");
-    if (index >= 0) void complete(messages.slice(0, index + 1), "reply");
+    if (index >= 0) { cancelEditing(); void complete(messages.slice(0, index + 1), "reply"); }
   };
 
   const modelLabel = model ? model.split("/").filter(Boolean).pop() : "Connecting";
@@ -307,7 +325,7 @@ export default function Home() {
         {messages.length === 0 ? <div className="empty-state">
           <div className="orb"><span /></div>
         </div> : <div className="message-list">
-          {messages.map((message, index) => <MessageItem key={message.id} message={message} isLast={index === messages.length - 1} generating={generating} copied={copied === message.id || copied.startsWith(`${message.id}:`) ? copied : ""} copy={copy} regenerate={regenerate} />)}
+          {messages.map((message, index) => <MessageItem key={message.id} message={message} isLast={index === messages.length - 1} generating={generating} copied={copied === message.id || copied.startsWith(`${message.id}:`) ? copied : ""} copy={copy} regenerate={regenerate} editing={editingId === message.id} editDraft={editDraft} startEditing={startEditing} changeEdit={setEditDraft} cancelEditing={cancelEditing} submitEdit={submitEdit} modelReady={Boolean(model)} />)}
         </div>}
       </section>
 
@@ -361,14 +379,43 @@ export default function Home() {
   );
 }
 
-const MessageItem = memo(function MessageItem({ message, isLast, generating, copied, copy, regenerate }:
-  { message: Message; isLast: boolean; generating: boolean; copied: string; copy: (text: string, copyId: string) => void; regenerate: () => void }) {
-  return <article className={`message ${message.role} ${message.error ? "error" : ""}`} data-message-id={message.id} aria-busy={generating && isLast}>
+const MessageItem = memo(function MessageItem({ message, isLast, generating, copied, copy, regenerate, editing, editDraft, startEditing, changeEdit, cancelEditing, submitEdit, modelReady }:
+  { message: Message; isLast: boolean; generating: boolean; copied: string; copy: (text: string, copyId: string) => void; regenerate: () => void; editing: boolean; editDraft: string; startEditing: (message: Message) => void; changeEdit: (value: string) => void; cancelEditing: () => void; submitEdit: (messageId: string) => void; modelReady: boolean }) {
+  const editRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!editing || !editRef.current) return;
+    const textarea = editRef.current;
+    textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  }, [editing]);
+  useEffect(() => {
+    if (!editing || !editRef.current) return;
+    editRef.current.style.height = "0px";
+    editRef.current.style.height = `${Math.min(editRef.current.scrollHeight, 240)}px`;
+  }, [editing, editDraft]);
+  function editKeydown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Escape") { event.preventDefault(); cancelEditing(); return; }
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    if (event.metaKey || event.ctrlKey) {
+      event.preventDefault();
+      const { selectionStart, selectionEnd } = event.currentTarget;
+      const next = `${editDraft.slice(0, selectionStart)}\n${editDraft.slice(selectionEnd)}`;
+      changeEdit(next);
+      window.requestAnimationFrame(() => editRef.current?.setSelectionRange(selectionStart + 1, selectionStart + 1));
+    } else {
+      event.preventDefault(); submitEdit(message.id);
+    }
+  }
+  return <article className={`message ${message.role} ${message.error ? "error" : ""} ${editing ? "editing" : ""}`} data-message-id={message.id} aria-busy={generating && isLast}>
     <div className="message-role">{message.role === "user" ? "You" : "Q"}</div>
     <div className="message-body">
       {message.reasoning && <details className="reasoning"><summary>{generating && isLast && !message.content ? "Thinking…" : "Reasoning"}</summary><div>{message.reasoning}</div></details>}
-      {message.content ? <div className="message-content"><Content text={message.content} id={message.id} copy={copy} copied={copied} /></div> : <div className="thinking-indicator" aria-label="Generating"><span /><span /><span /></div>}
-      {message.content && <div className="message-tools"><button type="button" onClick={() => void copy(message.content, message.id)}>{copied === message.id ? "Copied" : "Copy"}</button>{message.role === "assistant" && isLast && !generating && <button type="button" onClick={regenerate}>Regenerate</button>}</div>}
+      {editing ? <form className="message-editor" onSubmit={(event) => { event.preventDefault(); submitEdit(message.id); }}>
+        <textarea ref={editRef} value={editDraft} onChange={(event) => changeEdit(event.target.value)} onKeyDown={editKeydown} rows={1} aria-label="Edit message" />
+        <div className="message-editor-actions"><button type="button" onClick={cancelEditing}>Cancel</button><button className="edit-submit" type="submit" disabled={!editDraft.trim() || !modelReady}>Save &amp; resend</button></div>
+      </form> : <>
+        {message.content ? <div className="message-content"><Content text={message.content} id={message.id} copy={copy} copied={copied} /></div> : <div className="thinking-indicator" aria-label="Generating"><span /><span /><span /></div>}
+        {message.content && <div className="message-tools"><button type="button" onClick={() => void copy(message.content, message.id)}>{copied === message.id ? "Copied" : "Copy"}</button>{message.role === "user" && !generating && <button type="button" onClick={() => startEditing(message)}>Edit</button>}{message.role === "assistant" && isLast && !generating && <button type="button" onClick={regenerate}>Regenerate</button>}</div>}
+      </>}
     </div>
   </article>;
 });
