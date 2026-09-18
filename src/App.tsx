@@ -9,14 +9,14 @@ type Settings = {
   systemPrompt: string; temperature: number; topP: number; maxTokens: number;
   enableThinking: boolean; thinkingBudget: number; topK: number; minP: number;
   repetitionPenalty: number; presencePenalty: number; frequencyPenalty: number;
-  seed: number; stream: boolean;
+  stream: boolean;
 };
 
 const DEFAULTS: Settings = {
   systemPrompt: "", temperature: 0, topP: 1, maxTokens: 2048,
   enableThinking: false, thinkingBudget: 1024, topK: 0, minP: 0,
   repetitionPenalty: 1, presencePenalty: 0, frequencyPenalty: 0,
-  seed: 0, stream: true,
+  stream: true,
 };
 const SETTINGS_STORAGE_KEY = "model-settings";
 
@@ -204,7 +204,8 @@ export default function Home() {
       top_p: settings.topP, top_k: settings.topK, min_p: settings.minP,
       repetition_penalty: settings.repetitionPenalty,
       presence_penalty: settings.presencePenalty,
-      frequency_penalty: settings.frequencyPenalty, seed: settings.seed,
+      frequency_penalty: settings.frequencyPenalty,
+      seed: Date.now() % 2_147_483_648,
       enable_thinking: settings.enableThinking,
       ...(settings.enableThinking ? { thinking_budget: settings.thinkingBudget } : {}),
     };
@@ -344,7 +345,6 @@ export default function Home() {
             <NumberInput label="Repetition Penalty" value={settings.repetitionPenalty} min={0} max={2} step={0.05} change={(repetitionPenalty) => update("repetitionPenalty", repetitionPenalty)} />
             <NumberInput label="Presence Penalty" value={settings.presencePenalty} min={-2} max={2} step={0.05} change={(presencePenalty) => update("presencePenalty", presencePenalty)} />
             <NumberInput label="Frequency Penalty" value={settings.frequencyPenalty} min={-2} max={2} step={0.05} change={(frequencyPenalty) => update("frequencyPenalty", frequencyPenalty)} />
-            <NumberInput label="Seed" value={settings.seed} min={0} max={2147483647} change={(seed) => update("seed", seed)} />
           </div>
           <div className="panel-footer">
             <button className={`reset-button ${confirmReset ? "confirming" : ""}`} type="button" onClick={() => { if (confirmReset) { setSettings(DEFAULTS); setConfirmReset(false); } else setConfirmReset(true); }}>{confirmReset ? "Confirm reset?" : "Restore defaults"}</button>
